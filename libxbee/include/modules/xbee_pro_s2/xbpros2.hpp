@@ -1,37 +1,43 @@
 #ifndef XBEE_PRO_SERIES_2_HPP
 #define XBEE_PRO_SERIES_2_HPP
 
-#include <libxbee/include/xb_serial.hpp>
+/* Chimera Includes */
 #include <Chimera/gpio.hpp>
+#include <Chimera/serial.hpp>
+
+/* Libxbee Includes */
+#include <libxbee/include/xb_serial.hpp>
+#include <libxbee/include/xb_definitions.hpp>
 
 namespace libxbee
 {
     namespace modules
     {
-        class xbeeProS2
-        {
-            public:
-				bool connect();
+		namespace XBEEProS2
+		{
+			class XBEEProS2
+			{
+			public:
+				void initialize(Chimera::Serial::BaudRate baud);
 
-                void getDeviceMetaData();
-                bool setSerialBaud();
+				bool ping();
 
-				template<typename T>
-				xbeeProS2(T* serialInterface, Chimera::GPIO::GPIOClass* rstPin)
-				{
-					serial = dynamic_cast<libxbee::XBEESerial*>(serialInterface);
-					gpio_reset = rstPin;
+				void getDeviceMetaData();
+				bool setSerialBaud();
 
-					gpio_reset->mode(Chimera::GPIO::Mode::OUTPUT_PUSH_PULL);
-					gpio_reset->write(Chimera::GPIO::State::HIGH);
-				}
+				XBEEProS2(int serialChannel, Chimera::GPIO::Port rstPort, uint8_t rstPin);
+				~XBEEProS2() = default;
 
-				~xbeeProS2() = default;
+			private:
+				Chimera::Serial::SerialClass* serial;
+				Chimera::GPIO::GPIOClass* reset;
 
-            private:
-				libxbee::XBEESerial* serial;
-				Chimera::GPIO::GPIOClass* gpio_reset;
-		};
+				void sendCMD(const char* data, size_t length);
+
+				bool readResultWithTimeout(uint8_t* data, size_t length, uint32_t timeout);
+			};
+		}
+        
     }
 }
 
