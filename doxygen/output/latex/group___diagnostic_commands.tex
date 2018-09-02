@@ -1,0 +1,39 @@
+\hypertarget{group___diagnostic_commands}{}\section{Diagnostic\+Commands}
+\label{group___diagnostic_commands}\index{Diagnostic\+Commands@{Diagnostic\+Commands}}
+\begin{DoxyCompactItemize}
+\item 
+\#define \mbox{\hyperlink{group___diagnostic_commands_ga604d8e87718a1dc53cded0e3c020fc40}{X\+B\+\_\+\+F\+I\+R\+M\+W\+A\+R\+E\+\_\+\+V\+ER}}~\char`\"{}VR\char`\"{}
+\item 
+\#define \mbox{\hyperlink{group___diagnostic_commands_ga58a2fc2812c3b0fd035f22391354ec16}{X\+B\+\_\+\+H\+A\+R\+D\+W\+A\+R\+E\+\_\+\+V\+ER}}~\char`\"{}HV\char`\"{}
+\end{DoxyCompactItemize}
+
+
+\subsection{Detailed Description}
+
+
+\subsection{Macro Definition Documentation}
+\mbox{\Hypertarget{group___diagnostic_commands_ga604d8e87718a1dc53cded0e3c020fc40}\label{group___diagnostic_commands_ga604d8e87718a1dc53cded0e3c020fc40}} 
+\index{Diagnostic\+Commands@{Diagnostic\+Commands}!X\+B\+\_\+\+F\+I\+R\+M\+W\+A\+R\+E\+\_\+\+V\+ER@{X\+B\+\_\+\+F\+I\+R\+M\+W\+A\+R\+E\+\_\+\+V\+ER}}
+\index{X\+B\+\_\+\+F\+I\+R\+M\+W\+A\+R\+E\+\_\+\+V\+ER@{X\+B\+\_\+\+F\+I\+R\+M\+W\+A\+R\+E\+\_\+\+V\+ER}!Diagnostic\+Commands@{Diagnostic\+Commands}}
+\subsubsection{\texorpdfstring{X\+B\+\_\+\+F\+I\+R\+M\+W\+A\+R\+E\+\_\+\+V\+ER}{XB\_FIRMWARE\_VER}}
+{\footnotesize\ttfamily \#define X\+B\+\_\+\+F\+I\+R\+M\+W\+A\+R\+E\+\_\+\+V\+ER~\char`\"{}VR\char`\"{}}
+
+Firmware Version Read firmware version of the module. The firmware version returns 4 hexadecimal values (2 bytes) \char`\"{}\+A\+B\+C\+D\char`\"{}. Digits A\+BC are the main release number and D is the revision number from the main release. \char`\"{}\+B\char`\"{} is a variant designator.
+
+X\+Bee and X\+Bee-\/\+P\+RO ZB modules return\+: 0x2xxx versions~\newline
+X\+Bee and X\+Bee-\/\+P\+RO Z\+Net modules return\+: 0x1xxx versions~\newline
+ Z\+Net firmware is not compatible with ZB firmware
+
+Parameter Range\+: 0-\/0x\+F\+F\+FF \mbox{[}read-\/only\mbox{]}~\newline
+Parameter Default\+: Factory Set \mbox{\Hypertarget{group___diagnostic_commands_ga58a2fc2812c3b0fd035f22391354ec16}\label{group___diagnostic_commands_ga58a2fc2812c3b0fd035f22391354ec16}} 
+\index{Diagnostic\+Commands@{Diagnostic\+Commands}!X\+B\+\_\+\+H\+A\+R\+D\+W\+A\+R\+E\+\_\+\+V\+ER@{X\+B\+\_\+\+H\+A\+R\+D\+W\+A\+R\+E\+\_\+\+V\+ER}}
+\index{X\+B\+\_\+\+H\+A\+R\+D\+W\+A\+R\+E\+\_\+\+V\+ER@{X\+B\+\_\+\+H\+A\+R\+D\+W\+A\+R\+E\+\_\+\+V\+ER}!Diagnostic\+Commands@{Diagnostic\+Commands}}
+\subsubsection{\texorpdfstring{X\+B\+\_\+\+H\+A\+R\+D\+W\+A\+R\+E\+\_\+\+V\+ER}{XB\_HARDWARE\_VER}}
+{\footnotesize\ttfamily \#define X\+B\+\_\+\+H\+A\+R\+D\+W\+A\+R\+E\+\_\+\+V\+ER~\char`\"{}HV\char`\"{}}
+
+Hardware Version Read the hardware version of the module version of the module. This command can be used to distinguish among different hardware platforms. The upper byte returns a value that is unique to each module type. The lower byte indicates the hardware revision. X\+Bee ZB and X\+Bee Z\+Net modules return the following (hexadecimal) values\+:~\newline
+0x19xx -\/ X\+Bee module~\newline
+0x1\+Axx -\/ X\+Bee-\/\+P\+RO module
+
+Parameter Range\+: 0-\/0x\+F\+F\+FF \mbox{[}read-\/only\mbox{]}~\newline
+Parameter Default\+: Factory Set 

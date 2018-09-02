@@ -17,7 +17,7 @@ namespace libxbee
     {
     public:
 
-		void initialize(Chimera::Serial::BaudRate baud = Chimera::Serial::BaudRate::SERIAL_BAUD_115200,
+		void initialize(uint32_t baud = Chimera::Serial::BaudRate::SERIAL_BAUD_115200,
 			Chimera::Serial::Modes tx_mode = Chimera::Serial::Modes::BLOCKING,
 			Chimera::Serial::Modes rx_mode = Chimera::Serial::Modes::BLOCKING);
 

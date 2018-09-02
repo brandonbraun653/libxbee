@@ -1,12 +1,22 @@
+/* C/C++ Includes */
+#include <string>
+
+/* Chimera Includes */
+#include <Chimera/logging.hpp>
+
+
 #include <libxbee/include/modules/xbee_pro_s2/xbpros2.hpp>
 
 
 using namespace Chimera::GPIO;
 using namespace Chimera::Serial;
+using namespace Chimera::Logging;
 
 static const size_t XB_DEFAULT_TIMEOUT_mS = 10;
-static const size_t XB_PING_TIMEOUT_mS = 2000;
-static const size_t XB_ENTER_AT_TIMEOUT_mS = 2000;
+
+
+static const size_t XB_SEMPHR_TAKE_TIMEOUT_mS = 100;
+
 
 namespace libxbee
 {
@@ -16,114 +26,185 @@ namespace libxbee
 		{
 			XBEEProS2::XBEEProS2(int serialChannel, Chimera::GPIO::Port rstPort, uint8_t rst_pin)
 			{
+				txComplete = xSemaphoreCreateCounting(32, 0);
+				rxComplete = xSemaphoreCreateBinary();
+				txRxComplete = xSemaphoreCreateBinary();
+
 				serial = new SerialClass(serialChannel);
 				reset = new GPIOClass(rstPort, rst_pin);
 
-				/* Reset is active low, so make sure this is high */
+				/* Reset is active low, so make sure the pin is high on startup */
 				reset->mode(Chimera::GPIO::Mode::OUTPUT_PUSH_PULL);
 				reset->write(Chimera::GPIO::State::HIGH);
 
-				/* Use this as a default starting point. Will likely change later */
-				serial->begin(BaudRate::SERIAL_BAUD_9600, Modes::BLOCKING, Modes::INTERRUPT);
+				/* Use this as a default starting point. Will likely change later in user code */
+				serial->begin(BaudRate::SERIAL_BAUD_115200, Modes::BLOCKING, Modes::INTERRUPT);
+				serial->attachThreadTrigger(TX_COMPLETE, &txComplete);
+				serial->attachThreadTrigger(RX_COMPLETE, &rxComplete);
+				serial->attachThreadTrigger(TXRX_COMPLETE, &txRxComplete);
 
 				/* Give the Xbee a little bit to stabilize from the possible reset event */
 				Chimera::delayMilliseconds(500);
 			}
 
-			libxbee::XBStatus XBEEProS2::discover(Chimera::Serial::BaudRate baud)
-			{
-				
+            XBEEProS2::~XBEEProS2()
+            {
+            }
 
+            libxbee::XBStatus XBEEProS2::discover(uint32_t baud)
+			{
+				Console.log(Level::INFO, "Starting XBEE Discovery...\r\n");
+				uint32_t discoveryBaud = baud;
+				XBStatus discoveryResult = XB_NOT_FOUND;
+
+				serial->setBaud(baud);
+
+				/* First try to ping the device at the requested baudrate. If that fails, iterate through
+				 * the standard baudrates, hoping that it lies on one of them. */
+				if (goToCommandMode() != XB_OK)
+				{
+					uint32_t standardRates[] = { 9600u, 19200u, 38400u, 57600u, 115200u, 230400u, 460800u, 921600u };
+
+					for (size_t i = 0; i < sizeof(standardRates); i++)
+					{
+						Console.log(Level::INFO, "Pinging XBEE at baud: %d\r\n", standardRates[i]);
+						serial->setBaud(standardRates[i]);
+						
+						if (goToCommandMode() == XB_OK)
+						{
+							discoveryBaud = standardRates[i];
+							discoveryResult = XB_OK;
+                            Console.log(Level::INFO, "Found XBEE at baud: %d\r\n", discoveryBaud);
+							break;
+						}
+					}
+
+                    /* Print out some statements depending on the result of discovery */
+                    #ifdef DEBUG
+                    if ((discoveryResult == XB_OK) && (discoveryBaud != baud))
+                    {
+                        Console.log(Level::WARN, "Discovered baud rate [%d] doesn't match expected [%d]\r\n", discoveryBaud, baud);
+                    }
+                    else
+                    {
+                        Console.log(Level::WARN, "XBEE not found with standard baud rates at 8N1.\r\n");
+                    }
+                    #endif
+				}
+                else
+                {
+                    discoveryResult = XB_OK;
+                    Console.log(Level::INFO, "Found XBEE at baud: %d\r\n", discoveryBaud);
+                }
 				
+				return discoveryResult;
 			}
 
 			libxbee::XBStatus XBEEProS2::initialize(const Config& config)
-			{
+			{   
+                if (!updateTimingParams())
+                {
+                    #ifdef DEBUG
+                    Console.log(Level::ERROR, "XBEE: Failed updating timing info!\r\n");
+                    #endif
 
+                    return XB_BAD_RESULT;
+                }
+
+
+                size_t result = setATModeTimeout(6000, true);
+                Console.log(Level::INFO, "Set to [%d]\r\n", result);
+
+                return XB_OK;
 			}
 
-			bool XBEEProS2::ping()
-			{
-				bool success = false;
-				uint8_t result[2] = { 0, 0 };
+            size_t XBEEProS2::setATModeTimeout(size_t atTimeout_mS, bool verify)
+            {
+                uint16_t registerValue = XB_MAX_AT_TIMEOUT_HEX;
 
-				sendCommand(XB_FIRMWARE_VER, strlen(XB_FIRMWARE_VER));
+                /* Some quick boundary checking... */
+                if (atTimeout_mS <= XB_MIN_AT_TIMEOUT_MS)
+                {
+                    registerValue = XB_MIN_AT_TIMEOUT_HEX;
+                }
+                else if (atTimeout_mS >= XB_MAX_AT_TIMEOUT_MS)
+                {
+                    registerValue = XB_MAX_AT_TIMEOUT_HEX;
+                }
+                else
+                {
+                    registerValue = atTimeout_mS / XB_AT_TIMEOUT_MULT;
+                }
 
-				/* If we get any response at all, it means we are still in AT mode and we can respond to commands.
-				 * At this point, it doesn't really matter what the actual response is.*/
-				if (readResultWithTimeout(result, sizeof(result), XB_PING_TIMEOUT_mS) == XB_OK)
-				{
-					success = true;	
-				}
+                /* Make sure the OK response is captured before moving on */
+                txFrameWithResult(XB_CMD_MODE_TIMEOUT, registerValue);
 
-				return success;
-			}
+                if (verify)
+                {
+                    verifyParameter(XB_CMD_MODE_TIMEOUT, registerValue);
 
-			Version XBEEProS2::getVersion()
-			{
-				Version temp;
-				memset(&temp, 0, sizeof(Version));
+                    /* Convert the actual value back into milliseconds. The result of verifyParameter
+                     * is stored in the rxBuffer as a hex string. */
+                    strip(rxBuffer, "\r\n");
+                    uint16_t tmp = (uint16_t)strtol(rxBuffer, nullptr, 16);
+                    return (size_t)(tmp * XB_AT_TIMEOUT_MULT);
+                }
+                else
+                {
+                    return atTimeout_mS;
+                }
+            }
 
-				
+            size_t guardTime(size_t guardTime_mS, bool verify)
+            {
+                /* First write the data to the XBEE */
 
-			}
+                /* If needed, verify that the expected value matches the actual */
+            }
+
+            bool XBEEProS2::isATMode()
+            {
+                /* Easiest way to check is if we can get the version string */
+                bool success = false;
+
+                #ifdef USING_FREERTOS
+                if ((xTaskGetTickCount() - lastCmdMode) < atModeTimeout_mS)
+                {
+                    success = true;
+                }
+                #else
+                /* If we get any response at all, it means we are in AT mode...for now.*/
+                uint16_t dummyVar;
+                write(XB_FIRMWARE_VER, strlen(XB_FIRMWARE_VER));
+                if (readWithTimeout((uint8_t*)&dummyVar, sizeof(dummyVar), guardTimeout_mS) == XB_OK)
+                {
+                    success = true;
+                }
+                #endif
+               
+                return success;
+            }
 
 
-			libxbee::XBStatus XBEEProS2::txCommandWithResult(uint8_t* dataIn, size_t lenIn, uint8_t* dataOut, size_t lenOut, size_t timeout)
-			{
-				XBStatus result = XB_OK;
-
-				if ((dataIn == nullptr) || (dataOut == nullptr))
-				{
-					return XB_INVALID_ADDRESS;
-				}
-
-				/* Send the command sequence with the assumption we are still in command mode */
-				sendCommand((const char*)dataIn, lenIn);
-				result = readResultWithTimeout(dataOut, lenOut, timeout);
-
-				switch (result)
-				{
-				case XBStatus::XB_OK:
-					break;
-
-				case XBStatus::XB_TIMEOUT:
-					/* If we get here, the Xbee was not in command mode. Go back to AT mode and try again. */
-					if (goToCommandMode() == XB_OK)
-					{
-						sendCommand((const char*)dataIn, lenIn);
-						result = readResultWithTimeout(dataOut, lenOut, timeout);
-					}
-					else
-					{
-						result = XB_NO_RESPONSE;
-					}
-					break;
-
-				//Add more error cases as they arrive
-
-				default:
-					result = XB_UNKNOWN_ERROR;
-					break;
-				}
-				
-
-				return result;
-			}
-
-			libxbee::XBStatus XBEEProS2::goToCommandMode()
+            libxbee::XBStatus XBEEProS2::goToCommandMode()
 			{
 				XBStatus result = XB_NO_RESPONSE;
-				uint8_t response[strlen(XB_AT_MODE_RESP)];
-				memset(response, 0, sizeof(response));
+				memset(rxBuffer, 0, XBEE_RX_BUFFER_SIZE);
 
-				sendCommand(XB_ENTER_AT_MODE, strlen(XB_ENTER_AT_MODE));
+				write(XB_ENTER_AT_MODE, strlen(XB_ENTER_AT_MODE));
 
-				if (readResultWithTimeout(response, sizeof(response), XB_ENTER_AT_TIMEOUT_mS) == XB_OK)
+				if (readWithTimeout((uint8_t*)rxBuffer, XBEE_RX_BUFFER_SIZE, XB_ENTER_AT_TIMEOUT_mS) == XB_OK)
 				{
-					if (memcmp(response, XB_AT_MODE_RESP, sizeof(response)) == 0)
+					if (memcmp(rxBuffer, XB_AT_MODE_RESP, sizeof(XB_AT_MODE_RESP)) == 0)
 					{
 						result = XB_OK;
+                        Chimera::delayMilliseconds(guardTimeout_mS);
+
+                        /* Keep track of the tick at which we entered AT mode. This helps later with determining if 
+                         * we have timed out of AT mode.*/
+                        #ifdef USING_FREERTOS
+                        lastCmdMode = xTaskGetTickCount();
+                        #endif
 					}
 					else
 					{
@@ -131,21 +212,23 @@ namespace libxbee
 					}
 				}
 
+                #ifdef DEBUG
+                if (result != XB_OK)
+                {
+                    Console.log(Level::ERROR, "XBEE: Failed to enter AT mode!\r\n");
+                }
+                #endif
+
 				return result;
 			}
 
-			void XBEEProS2::sendCommand(const char* data, size_t length)
-			{
-				serial->write(data, length);
-			}
-
-			XBStatus XBEEProS2::readResultWithTimeout(uint8_t* data, size_t length, size_t timeout_mS)
+			libxbee::XBStatus XBEEProS2::readWithTimeout(uint8_t* data, size_t length, size_t timeout_mS)
 			{
 				XBStatus result = XB_TIMEOUT;
 				size_t startTime = 0;
 				size_t recheckDelay_mS = 10;	
 
-				while ((startTime < timeout_mS) || (result == XB_TIMEOUT))
+				while (startTime < timeout_mS)
 				{
 					if (serial->availablePackets())
 					{
@@ -165,6 +248,8 @@ namespace libxbee
 							result = XB_UNKNOWN_ERROR;
 							break;
 						}
+
+						break;
 					}
 					else
 					{
@@ -176,7 +261,87 @@ namespace libxbee
 				return result;
 			}
 
-		}
+
+            bool XBEEProS2::updateTimingParams()
+            {
+                #ifdef DEBUG
+                Console.log(Level::INFO, "XBEE: Initializing timing info\r\n");
+                #endif
+
+                if (!isATMode() && (goToCommandMode() != XB_OK))
+                {
+                    return false;
+                }
+
+                int bytes = 0;
+                bool updateSuccess = true;
+
+                /* Guard Time */
+                memset(rxBuffer, 0, XBEE_RX_BUFFER_SIZE);
+                bytes = frameBuilder(XB_SET_GUARD_TIME, nullptr);
+
+                if (bytes > 0)
+                {
+                    write(txBuffer, (size_t)bytes);
+                    if (readWithTimeout((uint8_t*)rxBuffer, XBEE_RX_BUFFER_SIZE, XB_DEFAULT_TIMEOUT_mS) == XB_OK)
+                    {
+                        guardTimeout_mS = (uint16_t)strtol(rxBuffer, nullptr, 16);
+                    }
+                    else
+                    {
+                        updateSuccess = false;
+                    }
+                }
+                
+
+                /* AT Command Timeout */
+                memset(rxBuffer, 0, XBEE_RX_BUFFER_SIZE);
+                bytes = frameBuilder(XB_CMD_MODE_TIMEOUT, nullptr);
+
+                if (bytes > 0)
+                {
+                    write(txBuffer, (size_t)bytes);
+                    if (readWithTimeout((uint8_t*)rxBuffer, XBEE_RX_BUFFER_SIZE, XB_DEFAULT_TIMEOUT_mS) == XB_OK)
+                    {
+                        atModeTimeout_mS = ((uint16_t)strtol(rxBuffer, nullptr, 16)) * 100;
+                    }
+                    else
+                    {
+                        updateSuccess = false;
+                    }
+                }
+
+                return updateSuccess;
+            }
+
+            char* XBEEProS2::strip(char* buffer, const char* chars)
+            {
+                /* Thanks SOF! https://stackoverflow.com/questions/2693776/removing-trailing-newline-character-from-fgets-input */
+                buffer[strcspn(buffer, chars)] = 0;
+            }
+
+            template<>
+            XBStatus XBEEProS2::verifyParameter(const char* command, const char* expected)
+            {
+                if (!command)
+                {
+                    return XB_INVALID_PARAM;
+                }
+
+                XBStatus result = txFrameWithResult(command);
+
+                if (result == XB_OK && (memcmp(rxBuffer, expected, strlen(expected)) != 0))
+                {
+                    result = XB_FAILED_COMPARE;
+
+                    #ifdef DEBUG
+                    Console.log(Level::ERROR, "XBEE: Param compare [%s] doesn't match [%s]", rxBuffer, txBuffer);
+                    #endif
+                }
+
+                return result;
+            }
+        }
 		
 	}
 }

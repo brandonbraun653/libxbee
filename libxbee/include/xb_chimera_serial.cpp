@@ -10,7 +10,7 @@ namespace libxbee
 		this->serial = new Chimera::Serial::SerialClass(channel);
 	}
 
-	void XbeeChimeraSerial::initialize(BaudRate baud, Modes tx_mode, Modes rx_mode)
+	void XbeeChimeraSerial::initialize(uint32_t baud, Modes tx_mode, Modes rx_mode)
 	{
 		serial->begin(baud, tx_mode, rx_mode);
 
