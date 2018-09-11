@@ -31,19 +31,38 @@ namespace libxbee
 				 *	rate, the software will search through all available standard baud rates for the device, error-ing out if 
 				 *	it cannot be found.
 				 *
-				 *	@param[in]	baud	Desired baud rate to use for communication
-				 *	@return XB_OK if device was found, XB_NOT_FOUND if not
+				 *	@param[in]	baud	        Desired baud rate to use for communication
+				 *	@return     XBStatus        XB_OK if device was found, XB_NOT_FOUND if not
 				 **/
 				XBStatus discover(uint32_t baud);
 
-				/** Initializes an Xbee after discovery has been performed
+				/** Initializes an Xbee to some basic settings
 				 *	Attempts to reprogram Xbee settings according to a configuration struct. All settings are verified by
 				 *	reading back of the data after writing.
 				 *
 				 *	@param[in] config	        Configuration struct for how the Xbee should be set up
-				 *	@return                     XB_OK if everything is alright, error code from XBStatus if not
+				 *	@return                     XB_OK if everything is alright, error code if not
 				 **/
 				XBStatus initialize(const Config& config);
+
+                /** Causes all queued command register value changes to be applied.
+                 *  This does not write parameters to non-volatile memory, so registers will be reset on power cycling to whatever values
+                 *  are stored in on-board memory.
+                 *
+                 *  @return     XBStatus        XB_OK if everything is alright, error code if not
+                 **/
+                XBStatus applyChanges();
+
+                /** Writes whatever values are currently set in the device registers to non-volatile memory so that parameters persist
+                 *  through subsequent resets. Use this sparingly as the memory can get worn out with too many write cycles.
+                 *  
+                 *  @return     XBStatus        XB_OK if everything is alright, error code if not
+                 **/
+                XBStatus updateNonVolatileMemory();
+
+                void setBaudRate(uint32_t baud, bool applyChange);
+
+                uint32_t getBuadRate();
 
                 /** Set/Read the period of inactivity (no valid commands received) after which the RF module automatically exits 
                  *  AT Command Mode and returns to Idle Mode.
@@ -173,7 +192,8 @@ namespace libxbee
                 /** Transmit Frame with Result
                  *	Transmits a single command to the Xbee and returns back whatever response was given. If the device was
                  *	not in command (AT) mode it will be placed into it. By default, the data for both transmit and receive 
-                 *  are written to the internal tx/rx buffers.
+                 *  are written to the internal tx/rx buffers. This function will not return until the data has been read,
+                 *  or the timeout has occured.
                  *
                  *	@param[in]	command     The command to be used
                  *  @param[in]  payload     If desired, data to be attached to the frame
@@ -231,6 +251,7 @@ namespace libxbee
                     return result;
                 }
 
+                bool isRxBufferEqual(const char* data);
                 
 			};
 

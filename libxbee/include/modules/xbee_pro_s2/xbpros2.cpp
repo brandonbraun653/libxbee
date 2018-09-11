@@ -111,12 +111,60 @@ namespace libxbee
                     return XB_BAD_RESULT;
                 }
 
+                /* First change the baud rate to the desired value and make sure we can talk */
+                
+
+                /* Then update the rest of the parameters. */
 
                 size_t result = setATModeTimeout(6000, true);
                 Console.log(Level::INFO, "Set to [%d]\r\n", result);
 
+                /* keep the setting changes here minimal. We want the user to take advantage of the API 
+                 * and build their own functions to write commands. 
+                 */
+
+                /* Finally, apply all the changes */
+
                 return XB_OK;
 			}
+
+            libxbee::XBStatus XBEEProS2::applyChanges()
+            {
+                txFrameWithResult(XB_APPLY_CHANGES);
+
+                if (isRxBufferEqual(XB_DEFAULT_RESPONSE))
+                {
+                    return XB_OK;
+                } 
+                else
+                {
+                    return XB_FAILED_COMMAND;
+                }
+            }
+
+            libxbee::XBStatus XBEEProS2::updateNonVolatileMemory()
+            {
+                txFrameWithResult(XB_WRITE_MEMORY);
+
+                if (isRxBufferEqual(XB_DEFAULT_RESPONSE))
+                {
+                    return XB_OK;
+                }
+                else
+                {
+                    return XB_FAILED_COMMAND;
+                }
+            }
+
+            void XBEEProS2::setBaudRate(uint32_t baud, bool applyChange)
+            {
+                // Change baud cmd, apply change, reconfig uart after OK\r, then try to enter cmd mode
+            }
+
+            uint32_t XBEEProS2::getBuadRate()
+            {
+
+            }
 
             size_t XBEEProS2::setATModeTimeout(size_t atTimeout_mS, bool verify)
             {
@@ -195,7 +243,7 @@ namespace libxbee
 
 				if (readWithTimeout((uint8_t*)rxBuffer, XBEE_RX_BUFFER_SIZE, XB_ENTER_AT_TIMEOUT_mS) == XB_OK)
 				{
-					if (memcmp(rxBuffer, XB_AT_MODE_RESP, sizeof(XB_AT_MODE_RESP)) == 0)
+					if (memcmp(rxBuffer, XB_DEFAULT_RESPONSE, sizeof(XB_DEFAULT_RESPONSE)) == 0)
 					{
 						result = XB_OK;
                         Chimera::delayMilliseconds(guardTimeout_mS);
@@ -341,6 +389,19 @@ namespace libxbee
 
                 return result;
             }
+
+            bool XBEEProS2::isRxBufferEqual(const char* data)
+            {
+                bool result = true;
+
+                if (memcmp(rxBuffer, data, strlen(data)) != 0)
+                {
+                    result = false;
+                }
+
+                return result; 
+            }
+
         }
 		
 	}

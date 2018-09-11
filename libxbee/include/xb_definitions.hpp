@@ -5,18 +5,11 @@
  /**
  * @defgroup ATCommandOptions
  * @defgroup DiagnosticCommands
- */
+ * @defgroup ExecutionCommands
+ * @defgroup Coordinator
+ * @defgroup Router
+ * @defgroup EndDevice
 
-/** 
- * @defgroup Coordinator 
- */
-
-/**
- * @defgroup Router 
- */
-
-/**
- * @defgroup EndDevice 
  */
 
 #ifndef XBEE_DEFINITIONS_HPP
@@ -26,11 +19,13 @@
 
 namespace libxbee
 {   
-    #define XB_DELIMITER "\r"
+    #define XB_DELIMITER            "\r"
+    #define XB_DEFAULT_RESPONSE	    "OK\r"
+
     #define XB_ATxx_COMMAND_LENGTH 5      /**< The character length of all the ATxx commands possible */
 
-	#define XB_ENTER_AT_MODE  "+++"
-	#define XB_AT_MODE_RESP	  "OK\r"
+	#define XB_ENTER_AT_MODE        "+++"
+	
 	
 
 	/**
@@ -100,8 +95,10 @@ namespace libxbee
 	 *	Parameter Default: 0x3E8  [1000d]
 	 **/
 	#define XB_SET_GUARD_TIME		"ATGT"
-    #define XB_MAX_GUARD_TIME_MS    (3300)
-    #define XB_MIN_GUARD_TIME_MS    (1)
+    #define XB_MAX_GUARD_TIME_HEX   (0x0CE4)
+    #define XB_MIN_GUARD_TIME_HEX   (0x0001)
+    #define XB_MAX_GUARD_TIME_MS    ((uint16_t)3300)
+    #define XB_MIN_GUARD_TIME_MS    ((uint16_t)1)
 
 	/** Command Sequence Character
 	 *	Set/Read the ASCII character value to be used between Guard Times of the AT Command Mode Sequence 
@@ -115,6 +112,46 @@ namespace libxbee
 	#define XB_SET_CMD_SEQ_CHAR		"ATCC"
 
 	/** @} */ /* !ATCommandOptions */
+
+    /**
+    * @ingroup ExecutionCommands
+    * @{
+    */
+
+    /** Apply Changes 
+     *  Applies changes to all command registers causing queued command register values to be applied. For example,
+     *  changing the serial interface rate with the BD command will not change the UART interface rate until changes 
+     *  are applied with the AC command. The CN command and 0x08 API command frame also apply changes.
+     **/
+    #define XB_APPLY_CHANGES        "ATAC"
+
+    /** Write Changes 
+     *  Write parameter values to non-volatile memory so that parameter modifications persist through subsequent resets.
+     *  Note: Once WR is issued, no additional characters should be sent to the module until after the “OK\r” response 
+     *  is received. The WR command should be used sparingly. The EM250 supports a limited number of write cycles.
+     **/
+    #define XB_WRITE_MEMORY         "ATWR"
+
+
+    #define XB_RESTORE_DEFAULTS     "ATRE"
+        
+    #define XB_SOFTWARE_RESET       "ATFR"
+    
+    #define XB_NETWORK_RESET        "ATNR"
+    
+    #define XB_SLEEP_IMMEDIATE      "ATSI"
+    
+    #define XB_COMMISSION_BTN_PRESS "ATCB"
+    
+    #define XB_NODE_DISCOVER        "ATND"
+    
+    #define XB_DESTINATION_NODE     "ATDN"
+    
+    #define XB_FORCE_SAMPLE         "ATIS"
+    
+    #define XB_ACTIVE_SCAN          "ATAS"
+
+    /** @} */ /* !ExecutionCommands */
 
 
 	enum XBStatus : int
@@ -130,8 +167,10 @@ namespace libxbee
 		XB_INVALID_ADDRESS,
         XB_INVALID_PARAM,
 		XB_NOT_FOUND,
+        XB_FAILED_COMMAND,
         XB_FAILED_COMMAND_MODE,
         XB_FAILED_COMPARE,
+
 
 		XB_NUMBER_OF_STATUS_KEYS
 	};
